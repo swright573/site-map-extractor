@@ -22,7 +22,7 @@ class BurpExtender(IBurpExtender, ITab):
     #
     def registerExtenderCallbacks(self, callbacks):
 
-        print 'Loading Brp Extract Site Map extension ...'
+        print 'Loading Site Map Extractor ...'
         # Set up extension environment
         self._callbacks = callbacks
         self._helpers = callbacks.getHelpers()
