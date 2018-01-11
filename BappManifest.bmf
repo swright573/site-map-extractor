@@ -1,0 +1,12 @@
+Uuid: f991b67d4ef94f3c8692c3edca06583e
+ExtensionType: 2
+Name: Site Map Extractor
+RepoName: site-map-extractor
+ScreenVersion: 1.0
+SerialVersion: 0
+MinPlatformVersion: 0
+ProOnly: False
+Author: Susan Wright
+ShortDescription: Extracts key data from the Site Map and allows export to CSV.
+EntryPoint: site_map_extractor.py
+BuildCommand: 
