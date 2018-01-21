@@ -15,6 +15,7 @@ from java.awt import Dimension
 from java.awt import GridLayout
 import java.lang as lang
 import os.path
+import csv
 
 class BurpExtender(IBurpExtender, ITab):
     #
@@ -350,9 +351,16 @@ class BurpExtender(IBurpExtender, ITab):
         if self.uiLogArea.getText() == '':
             JOptionPane.showMessageDialog(self.tab,'The log contains no data.')
             return
-        f, ok = self.openFile('csv', 'CSV files', 'w')
+        f, ok = self.openFile('csv', 'CSV files', 'wb')
         if ok:
-            f.write(self.uiLogArea.getText())
+            # f.write(self.uiLogArea.getText()) --- OLD before implemented csv module
+            # self.writer = csv.writer(f, dialect='excel', delimiter=',')
+            self.writer = csv.writer(f)
+            xxyyzz = self.uiLogArea.getText().decode("utf-8").split("\x0a")
+            for i in xxyyzz:
+                ii = i.split(",")
+                print(ii)
+                self.writer.writerow(ii)
             f.close()
             self.uiLogArea.setText('')
             self.uiLogArea.setText('File written successfully')
@@ -376,7 +384,7 @@ class BurpExtender(IBurpExtender, ITab):
             j = True
             while j:
                 try:
-                    f = open(myFilePath, fileparm)
+                    f = open(myFilePath,mode=fileparm)
                     j = False
                 except IOError:
                     okWrite = JOptionPane.showConfirmDialog(self.tab,'File cannot be opened. Correct and retry?','',JOptionPane.YES_NO_OPTION)
