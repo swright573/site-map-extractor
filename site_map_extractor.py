@@ -7,8 +7,10 @@ from javax.swing import JFileChooser
 from javax.swing import BorderFactory
 from javax.swing import JOptionPane
 from javax.swing.filechooser import FileNameExtensionFilter
-from javax.swing.border import EmptyBorder
 from java.awt import BorderLayout
+from javax.swing.border import EmptyBorder
+from javax.swing import JTable
+from javax.swing.table import DefaultTableModel
 from java.awt import Color
 from java.awt import Font
 from java.awt import Dimension
@@ -21,16 +23,20 @@ class BurpExtender(IBurpExtender, ITab):
     #
     # Implement IBurpExtender
     #
+
+    tableData = []
+    colNames = ()
+
     def registerExtenderCallbacks(self, callbacks):
 
-        print 'Loading Site Map Extractor ...'
+        print('Loading Site Map Extractor ...')
         # Set up extension environment
         self._callbacks = callbacks
         self._helpers = callbacks.getHelpers()
         self._callbacks.setExtensionName('Site Map Extractor')
         self.drawUI()
         self._callbacks.addSuiteTab(self)
-        print '\nExtension loaded successfully!'
+        print('\nSite Map Extractor extension loaded successfully!')
 
     def drawUI(self):
         self.tab = swing.JPanel()
@@ -62,7 +68,7 @@ class BurpExtender(IBurpExtender, ITab):
         self.uiLinksAbs = swing.JCheckBox('Absolute     ', True)
         self.uiLinksRel = swing.JCheckBox('Relative     ', True)
         # create a subpanel so Run button will be centred
-        self.uiLinksRun = swing.JButton('Run',actionPerformed=self.exportLinks)
+        self.uiLinksRun = swing.JButton('Run',actionPerformed=self.extractLinks)
         self.uiLinksSave = swing.JButton('Save Log to CSV File',actionPerformed=self.savetoCsvFile)
         self.uiLinksClear = swing.JButton('Clear Log',actionPerformed=self.clearLog)
         self.uiLinksButtonPanel = swing.JPanel()
@@ -134,11 +140,6 @@ class BurpExtender(IBurpExtender, ITab):
         self.uiLogLabel = swing.JLabel('Log:')
         self.uiLogLabel.setFont(Font('Tahoma', Font.BOLD, 14))
         self.uiLogPane = swing.JScrollPane()
-        self.uiLogArea = swing.JTextArea('')
-        self.uiLogArea.setLineWrap(True)
-        self.uiLogPane.setViewportView(self.uiLogArea)
-        self.uiLogPane.setPreferredSize(Dimension(350,200))
-
         layout = swing.GroupLayout(self.tab)
         self.tab.setLayout(layout)
         
@@ -174,6 +175,7 @@ class BurpExtender(IBurpExtender, ITab):
                 .addComponent(self.uipaneA)
                 .addGap(20,20,20)
                 .addComponent(self.uiLogLabel)
+                .addGap(5,5,5)
                 .addComponent(self.uiLogPane)
                 .addGap(20,20,20)))
 
@@ -184,61 +186,86 @@ class BurpExtender(IBurpExtender, ITab):
         return self.tab
 
     def scopeOnly(self):
-        # scope only or everything
         if self.uiScopeOnly.isSelected():
             return True
         else:
             return False
 
-    def exportLinks(self, e):
-        self.uiLogArea.setText('')
+    def extractLinks(self, e):
+        self.blankLog()
         self.siteMapData = self._callbacks.getSiteMap(None)
-        # Export absolute links, relative links, or both?
+        # What links should be extracted? absolute links, relative links, or both?
+        self.destAbs = self.destRel = False
         if self.uiLinksAbs.isSelected():
             self.destAbs = True
-        else:
-            self.destAbs = False
         if self.uiLinksRel.isSelected():
             self.destRel = True
-        else:
-            self.destRel = False
 
-        # build title row for extract based on user choices
-        self.uiLogArea.append('Page,Link')
+        # Start building JTable to contain the extracted data
+        self.colNames = ('Page', 'Link')
+        self.tableData = []
         for i in self.siteMapData:
             self.requestInfo = self._helpers.analyzeRequest(i)
             self.url = self.requestInfo.getUrl()
             if self.scopeOnly() and not(self._callbacks.isInScope(self.url)):
                 continue
+
+            self.urlDecode = self._helpers.urlDecode(str(self.url))
             self.response = i.getResponse()
-            if self.response != None:
-                self.responseInfo = self._helpers.analyzeResponse(self.response)
-                self.responseOffset = self.responseInfo.getBodyOffset()
-                self.responseBody = self._helpers.bytesToString(self.response)[self.responseOffset:]
-                self.responseBody = self.responseBody.decode('utf-8','ignore')
-                keep_looking = True
-                while keep_looking:
-                    i = self.responseBody.find('<a href=')
-                    if i == -1:
-                        break
-                    self.responseBody = self.responseBody[i+8:]
-                    if self.responseBody[0:7] == '"http://':
-                        myOffset = 7
-                    elif self.responseBody[0:8] == '"https://':
-                        myOffset = 8
-                    else:
-                        myOffset = 1
-                    self.responseBody = self.responseBody[myOffset:]
-                    pos = self.responseBody.find('"')
-                    self.link = self.responseBody[0:pos]
-                    if ('http' in self.link and self.destAbs) or (not 'http' in self.link and self.destRel):
-                        # remove any extra CR/LF characters
-                        self.uiLogArea.append('\n' + self.stripURLPort(str(self.url)) + ',' + self.lstripWS(self.stripCRLF(self.link)))
-            continue
-        self.uiLogArea.setCaretPosition(0)
+            if self.response == None:   # if there's no response, there won't be any links :-)
+                continue
+            
+            self.responseInfo = self._helpers.analyzeResponse(self.response)
+            self.responseOffset = self.responseInfo.getBodyOffset()
+            self.responseBody = self._helpers.bytesToString(self.response)[self.responseOffset:]
+
+            keep_looking = True
+            while keep_looking:    # there may be multiple links in the response
+                i = self.responseBody.find('<a href=')
+                if i == -1:   # no more <a href's found
+                    break
+                self.responseBody = self.responseBody[i+8:]
+                isAbsLink = isRelLink = False
+                # Looking for either " or ' around links which can be either absolute or relative
+                # This assumes that for a link, quoting is consistent at front and back
+                if self.responseBody[0:7].lower() == '"http://':
+                    myOffset = 7
+                    isAbsLink = True
+                    endQuote = '"'
+                elif self.responseBody[0:7].lower() == "'http://":
+                    myOffset = 7
+                    isAbsLink = True
+                    endQuote = "'"                   
+                elif self.responseBody[0:8].lower() == '"https://':
+                    myOffset = 8
+                    isAbsLink = True
+                    endQuote = '"'
+                elif self.responseBody[0:8].lower() == "'https://":
+                    myOffset = 8
+                    isAbsLink = True
+                    endQuote = "'"
+                elif self.responseBody[0:1] == '"':
+                    myOffset = 1
+                    isRelLink = True
+                    endQuote = '"'
+                else:
+                    myOffset = 1
+                    isRelLink = True
+                    endQuote = "'"
+
+                self.responseBody = self.responseBody[myOffset:]
+                pos = self.responseBody.find(endQuote)
+                self.link = self.responseBody[0:pos]
+                if (isAbsLink and self.destAbs) or (isRelLink and self.destRel):
+                    # remove white space and extra CR/LF characters
+                    self.tableData.append([self.stripURLPort(self.urlDecode), self.lstripWS(self.stripCRLF(self.link))])
+
+        dataModel = DefaultTableModel(self.tableData, self.colNames)
+        self.uiLogTable = swing.JTable(dataModel)
+        self.uiLogPane.setViewportView(self.uiLogTable)
 
     def exportCodes(self, e):
-        self.uiLogArea.setText('')
+        self.blankLog()
         self.siteMapData = self._callbacks.getSiteMap(None)
         # response codes to be included
         self.rcodes = []
@@ -253,117 +280,93 @@ class BurpExtender(IBurpExtender, ITab):
         if self.uiRcode5xx.isSelected():
             self.rcodes += '5'
 
-        self.title = 'Request,Referer,Response Code'
         if '3' in self.rcodes:
-            self.title+= ',ReDirects To'
-        self.uiLogArea.append(self.title)
+            self.colNames = ('Request','Referer','Response Code','Redirects To')
+        else:
+            self.colNames.append('Request','Referer','Response Code')
+        self.tableData = []
+
         for i in self.siteMapData:
             self.requestInfo = self._helpers.analyzeRequest(i)
             self.url = self.requestInfo.getUrl()
-            if self.scopeOnly() & self._callbacks.isInScope(self.url) == False:
+            if self.scopeOnly() and not(self._callbacks.isInScope(self.url)):
                 continue
+
+            self.urlDecode = self._helpers.urlDecode(str(self.url))
             self.response = i.getResponse()
-            if self.response != None:
-                # Get referer if there is one
+            if self.response == None:
+                continue
+            # Get referer if there is one
+            self.requestHeaders = self.requestInfo.getHeaders()
+            self.referer = ''
+            for j in self.requestHeaders:
+                if j.startswith('Referer:'):
+                    self.fullReferer = j.split(' ')[1]
+                    # drop the querystring parameter
+                    self.referer = self.fullReferer.split('?')[0] 
+            # Get response code
+            self.responseInfo = self._helpers.analyzeResponse(self.response)
+            self.responseCode = self.responseInfo.getStatusCode()
+            self.firstDigit = str(self.responseCode)[0]
+            if self.firstDigit not in self.rcodes:
+                continue
+            if self.firstDigit in ['1','2','4','5']:     # Return codes 1xx, 2xx, 4xx, 5xx
+                self.tableData.append([self.stripURLPort(self.urlDecode), str(self.referer), str(self.responseCode)])    
+            elif self.firstDigit == '3':   # Return code 3xx Redirection
                 self.requestHeaders = self.requestInfo.getHeaders()
-                self.referer = ''
-                for j in self.requestHeaders:
-                    if j.startswith('Referer:'):
-                        self.fullReferer = j.split(' ')[1]
-                        # drop the querystring parameter
-                        self.referer = self.fullReferer.split('?')[0] 
-                # Get response code
-                self.responseInfo = self._helpers.analyzeResponse(self.response)
-                self.responseCode = self.responseInfo.getStatusCode()
-                self.firstDigit = str(self.responseCode)[0]
-                if self.firstDigit in self.rcodes:
-                    if self.firstDigit == '1':     # Return code 1xx Informational
-                        self.uiLogArea.append('\n' + self.stripURLPort(str(self.url)) + ',' + str(self.referer) + ',' + str(self.responseCode)+ ',')    
-                    elif self.firstDigit == '2':   # Return code 2xx Success
-                        self.uiLogArea.append('\n' + self.stripURLPort(str(self.url)) + ',' + str(self.referer) + ',' + str(self.responseCode)+ ',')
-                    elif self.firstDigit == '3':   # Return code 3xx Redirection
-                        self.requestHeaders = self.requestInfo.getHeaders()
-                        self.responseHeaders = self.responseInfo.getHeaders()
-                        for j in self.responseHeaders:
-                            if j.startswith('Location:'):
-                                self.location = j.split(' ')[1]
-                        self.uiLogArea.append('\n' + self.stripURLPort(str(self.url))+','+str(self.referer)+','+str(self.responseCode)+ ',' + self.location)
-                    elif self.firstDigit == '4':   # Return code 4xx Client Error
-                        self.uiLogArea.append('\n' + self.stripURLPort(str(self.url)) + ',' + str(self.referer)+ ',' +str(self.responseCode)+ ',')
-                    elif self.firstDigit == '5':   # Return code 5xx Server Error
-                        self.uiLogArea.append('\n' + self.stripURLPort(str(self.url)) + ',' + str(self.referer)+ ',' +str(self.responseCode)+ ',')
-            continue
-        self.uiLogArea.setCaretPosition(0)
+                self.responseHeaders = self.responseInfo.getHeaders()
+                for j in self.responseHeaders:
+                    if j.startswith('Location:'):
+                        self.location = j.split(' ')[1]
+                self.tableData.append([self.stripURLPort(self.urlDecode), str(self.referer), str(self.responseCode), self.location])
+
+        dataModel = DefaultTableModel(self.tableData, self.colNames)
+        self.uiLogTable = swing.JTable(dataModel)
+        self.uiLogPane.setViewportView(self.uiLogTable)
         
     def exportSiteMap(self,e):
-        self.uiLogArea.setText('')
-        self.uiLogArea.append('Working ...\n\n')
+        self.blankLog()
         f, ok = self.openFile('txt', 'Text files', 'wb')
         if ok:        
             # Retrieve site map data
             self.siteMapData = self._callbacks.getSiteMap(None)
-            num_requests = 0
-            num_responses = 0
             if self.uiMustHaveResponse.isSelected():
                 self.outputAll = False
             else:
                 self.outputAll = True
             for i in self.siteMapData:
-                try:
-                    self.myrequest = i.getRequest()
-                except:
-                    self.uiLogArea.append('There was a problem getting a request.\n')
-                    for i in sys.exc_info():
-                        self.uiLogArea.append('Error: %s \n' % i)
-                    break
+                self.myrequest = i.getRequest()  #self._helpers.urlDecode(i.getRequest())
                 self.requestInfo = self._helpers.analyzeRequest(i)
                 self.url = self.requestInfo.getUrl()
                 if self.scopeOnly() and not(self._callbacks.isInScope(self.url)):
                     continue
-                try:
-                    self.myresponse = i.getResponse()
-                except:
-                    self.uiLogArea.append('There was a problem getting a response.\n')
-                    for i in sys.exc_info():
-                        self.uiLogArea.append('Error: %s\n' % i)
-                    break
+                self.myresponse = i.getResponse()  #self._helpers.urlDecode(i.getResponse())
                 if self.myresponse != None:
-                    f.write('----- REQUEST\n')
-                    f.write(self.myrequest)
+                    f.write('----- REQUEST\r\n')
+                    f.write(self.myrequest)  #self._helpers.urlEncode(self.myrequest))
                     f.write('\n')
-                    num_requests += 1
-                    f.write('----- RESPONSE\n')
-                    f.write(self.myresponse)
+                    f.write('----- RESPONSE\r\n')
+                    f.write(self.myresponse)  #self._helpers.urlEncode(self.myresponse))
                     f.write('\n')
-                    num_responses += 1
                 elif not self.uiMustHaveResponse:
-                    f.write('----- REQUEST\n')
-                    f.write(self.myrequest)
+                    f.write('----- REQUEST\r\n')
+                    f.write(self.myrequest)  #self._helpers.urlEncode(self.myrequest))
                     f.write('\n')
-                    num_requests += 1                
-                continue
-            
-            self.uiLogArea.append('Number of requests output was ' + str(num_requests) + '\n')
-            self.uiLogArea.append('Number of responses output was ' + str(num_responses) + '\n')
             f.close()
+            JOptionPane.showMessageDialog(self.tab,'The Site Map file was successfully written.')
 
     def savetoCsvFile(self,e):
-        if self.uiLogArea.getText() == '':
+        if self.tableData == []:
             JOptionPane.showMessageDialog(self.tab,'The log contains no data.')
             return
         f, ok = self.openFile('csv', 'CSV files', 'wb')
         if ok:
-            # f.write(self.uiLogArea.getText()) --- OLD before implemented csv module
-            # self.writer = csv.writer(f, dialect='excel', delimiter=',')
             self.writer = csv.writer(f)
-            xxyyzz = self.uiLogArea.getText().decode("utf-8").split("\x0a")
-            for i in xxyyzz:
-                ii = i.split(",")
-                print(ii)
-                self.writer.writerow(ii)
+            self.writer.writerow(list(self.colNames))
+            for i in self.tableData:
+                self.writer.writerow(i)
             f.close()
-            self.uiLogArea.setText('')
-            self.uiLogArea.setText('File written successfully')
+            JOptionPane.showMessageDialog(self.tab,'The csv file was successfully written.')
 
     def openFile(self, fileext, filedesc, fileparm):
         myFilePath = ''
@@ -404,5 +407,19 @@ class BurpExtender(IBurpExtender, ITab):
         # Thanks to shpendk for this code(https://github.com/PortSwigger/site-map-fetcher/)
         return url.split(':')[0] + ':' + url.split(':')[1] + '/' + url.split(':')[2].split('/',1)[1]
 
-    def clearLog(self,e):
-        self.uiLogArea.setText('')
+    def blankLogTable(self):
+        self.tableData = []
+        return
+    
+    # This function is used when program wants to clear the log.
+    def blankLog(self):
+        self.uiLogPane.setViewportView(None)
+        self.blankLogTable()
+        return
+
+    # This function is used when the user clicks the Clear Log button.
+    def clearLog(self, e):
+        self.uiLogPane.setViewportView(None)
+        self.blankLogTable()
+        return
+
