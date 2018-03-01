@@ -24,7 +24,7 @@ This function saves the site map requests and responses to a .txt file. You can 
 ![File Verification](/Screenshots/SME-Screenshot2.JPG)
 
 #### Version
-0.9
+1.0
 
 #### Installation
 Jython 2.7+ is required for this extension to work  to set it up in Burp's Extender Options before adding the extension. Once that is done, add a new extension in the "Extensions" tab, choose "Python" as the extension type, and point to the "SiteMapExtractor.py" file. A successful load will be confirmed in the Output tab.
