@@ -1,7 +1,7 @@
 ## Site Map Extractor
 Site Map Extractor is a Burp extension written in Python that extracts various information from the Site Map. Optionally you can select to search the full site map or just the in-scope items. There are 3 types of information that can be extracted.
 
-#### Extract '<a href=' Links (including two possible vulnerabilities: 'unencrypted transport' & 'tabnabbing')
+#### Extract '<a href=' Links (and reports two possible vulnerabilities: 'unencrypted transport' & 'tabnabbing')
 This function searches responses for links of the form ```<a href=```. Note that this will include links within javascript and in commented out areas, but not links that start differently ```<a target="ignored" href=```. The log displays the found links and the page the link was found on. You have the option to select absolute links, relative links, or both.
 
 Log data can optionally be saved to a .csv file.
