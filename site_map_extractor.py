@@ -93,7 +93,7 @@ class BurpExtender(IBurpExtender, ITab):
         self.uiRcodePanel.setLayout(GridLayout(1,1))
         self.uiRcode1xx = swing.JCheckBox('1XX  ', False)
         self.uiRcode2xx = swing.JCheckBox('2XX  ', True)
-        self.uiRcode3xx = swing.JCheckBox('3XX  ', True) #TODO: Bug here, if 3XX is disabled no log is generated
+        self.uiRcode3xx = swing.JCheckBox('3XX  ', True)
         self.uiRcode4xx = swing.JCheckBox('4XX  ', True)
         self.uiRcode5xx = swing.JCheckBox('5XX  ', True)
         self.uiCodesRun = swing.JButton('Run',actionPerformed=self.exportCodes)
@@ -375,7 +375,7 @@ class BurpExtender(IBurpExtender, ITab):
         if '3' in self.rcodes:
             self.colNames = ('Request','Referer','Response Code','Redirects To')
         else:
-            self.colNames.append('Request','Referer','Response Code')
+            self.colNames = ('Request','Referer','Response Code')
         self.tableData = []
 
         for i in self.siteMapData:
