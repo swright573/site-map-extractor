@@ -95,7 +95,7 @@ class BurpExtender(IBurpExtender, ITab):
         self.uiRcode2xx = swing.JCheckBox('2XX  ', True)
         self.uiRcode3xx = swing.JCheckBox('3XX  ', True)
         self.uiRcode4xx = swing.JCheckBox('4XX  ', True)
-        self.uiRcode5xx = swing.JCheckBox('5XX     ', False)
+        self.uiRcode5xx = swing.JCheckBox('5XX  ', True)
         self.uiCodesRun = swing.JButton('Run',actionPerformed=self.exportCodes)
         self.uiCodesSave = swing.JButton('Save Log to CSV File',actionPerformed=self.savetoCsvFile)
         self.uiCodesClear = swing.JButton('Clear Log',actionPerformed=self.clearLog)        
@@ -193,6 +193,8 @@ class BurpExtender(IBurpExtender, ITab):
 
     def extractLinks(self, e):
         self.blankLog()
+        
+        #siteMapData only contains first requested entry of a page. Removing that page entry from burp target > site map > content will allow update.
         self.siteMapData = self._callbacks.getSiteMap(None)
         # What links should be extracted? absolute links, relative links, or both?
         self.destAbs = self.destRel = False
@@ -202,66 +204,156 @@ class BurpExtender(IBurpExtender, ITab):
             self.destRel = True
 
         # Start building JTable to contain the extracted data
-        self.colNames = ('Page', 'Link')
+        self.colNames = ('Page', 'HTTPS?', 'Link', 'Description', 'Target', 'Rel=', 'Possible vulnerabilities')
         self.tableData = []
         for i in self.siteMapData:
-            self.requestInfo = self._helpers.analyzeRequest(i)
-            self.url = self.requestInfo.getUrl()
-            if self.scopeOnly() and not(self._callbacks.isInScope(self.url)):
-                continue
+            try:
+				self.requestInfo = self._helpers.analyzeRequest(i)
+				self.url = self.requestInfo.getUrl()
+			
+				if self.scopeOnly() and not(self._callbacks.isInScope(self.url)):
+					continue
 
-            self.urlDecode = self._helpers.urlDecode(str(self.url))
-            self.response = i.getResponse()
-            if self.response == None:   # if there's no response, there won't be any links :-)
-                continue
-            
-            self.responseInfo = self._helpers.analyzeResponse(self.response)
-            self.responseOffset = self.responseInfo.getBodyOffset()
-            self.responseBody = self._helpers.bytesToString(self.response)[self.responseOffset:]
+				self.urlDecode = self._helpers.urlDecode(str(self.url))
+			 
+				self.response = i.getResponse()
+				if self.response == None:   # if there's no response, there won't be any links :-)
+					continue
+			
+				self.responseInfo = self._helpers.analyzeResponse(self.response)
+				self.responseOffset = self.responseInfo.getBodyOffset()
+				self.responseBody = self._helpers.bytesToString(self.response)[self.responseOffset:]
 
-            keep_looking = True
-            while keep_looking:    # there may be multiple links in the response
-                i = self.responseBody.find('<a href=')
-                if i == -1:   # no more <a href's found
-                    break
-                self.responseBody = self.responseBody[i+8:]
-                isAbsLink = isRelLink = False
-                # Looking for either " or ' around links which can be either absolute or relative
-                # This assumes that for a link, quoting is consistent at front and back
-                if self.responseBody[0:7].lower() == '"http://':
-                    myOffset = 7
-                    isAbsLink = True
-                    endQuote = '"'
-                elif self.responseBody[0:7].lower() == "'http://":
-                    myOffset = 7
-                    isAbsLink = True
-                    endQuote = "'"                   
-                elif self.responseBody[0:8].lower() == '"https://':
-                    myOffset = 8
-                    isAbsLink = True
-                    endQuote = '"'
-                elif self.responseBody[0:8].lower() == "'https://":
-                    myOffset = 8
-                    isAbsLink = True
-                    endQuote = "'"
-                elif self.responseBody[0:1] == '"':
-                    myOffset = 1
-                    isRelLink = True
-                    endQuote = '"'
-                else:
-                    myOffset = 1
-                    isRelLink = True
-                    endQuote = "'"
-
-                self.responseBody = self.responseBody[myOffset:]
-                pos = self.responseBody.find(endQuote)
-                self.link = self.responseBody[0:pos]
-                if (isAbsLink and self.destAbs) or (isRelLink and self.destRel):
-                    # remove white space and extra CR/LF characters
-                    self.tableData.append([self.stripURLPort(self.urlDecode), self.lstripWS(self.stripCRLF(self.link))])
-
+				keep_looking = True
+				while keep_looking:    # there may be multiple links in the response
+					#TODO: known issue: if link does not start with <a href= it won't be detected
+					i = self.responseBody.lower().find('<a href=')
+				
+					#define some variables
+					self.isHttps = None
+					self.Vulnerabilities = ""
+				
+					if i == -1:   # no more <a href's found
+						break
+					self.responseBody = self.responseBody[i+8:]
+					isAbsLink = isRelLink = False
+					# Looking for either " or ' around links which can be either absolute or relative
+					# This assumes that for a link, quoting is consistent at front and back
+					if self.responseBody[0:8].lower() == '"http://':
+						myOffset = 8
+						isAbsLink = True
+						endQuote = '"'
+						self.isHttps = False
+						self.Vulnerabilities = "Unencrypted transport"
+					elif self.responseBody[0:8].lower() == "'http://":
+						myOffset = 8
+						isAbsLink = True
+						endQuote = "'"      
+						self.isHttps = False    
+						self.Vulnerabilities = "Unencrypted transport"       
+					elif self.responseBody[0:8].lower() == '"mailto:':
+						myOffset = 0
+						isAbsLink = True
+						endQuote = '"'
+						self.isHttps = "(mailto)"   
+					elif self.responseBody[0:8].lower() == "'mailto:":
+						myOffset = 0
+						isAbsLink = True
+						endQuote = "'"      
+						self.isHttps = "(mailto)"    
+					elif self.responseBody[0:7].lower() == "mailto:":
+						myOffset = 0
+						isAbsLink = True
+						endQuote = ">" #might have space, but might not have space. Assume end will be there for sure. 
+						self.isHttps = "(mailto)"    
+					elif self.responseBody[0:9].lower() == '"https://':
+						myOffset = 9
+						isAbsLink = True
+						endQuote = '"'
+						self.isHttps = True
+					elif self.responseBody[0:9].lower() == "'https://":
+						myOffset = 9
+						isAbsLink = True
+						endQuote = "'"
+						self.isHttps = True
+					elif self.responseBody[0:1] == '"':
+						myOffset = 1
+						isRelLink = True
+						endQuote = '"'
+						self.isHttps = "(Relative)"
+					else:
+						myOffset = 1
+						isRelLink = True
+						endQuote = "'"
+						self.isHttps = "(Relative)"
+					
+					self.responseBody = self.responseBody[myOffset:]
+					pos = self.responseBody.find(endQuote)
+					self.link = self.responseBody[0:pos]
+				
+					# Looking for </a> end tag
+					# This assumes that the link is correctly ended
+					posEndTag = self.responseBody.lower().find("</a>")
+					self.fullLink = self.responseBody[0:posEndTag]
+				
+					# Looking for > at the end of the <a  tag 
+					# This again assumes that the link is correctly ended
+					posEndA = self.responseBody.lower().find(">")
+					self.description = self.responseBody[posEndA+1:posEndTag]
+			   
+			   
+					# Looking for a possible target that is described
+					self.target = ""
+					if self.responseBody.lower().find("target") < posEndA:
+						posTarget = self.responseBody.lower().find("target")
+						#search the end of this parameter - might be ' or " or even a space, but it should be directly after the target
+					
+						if self.responseBody[posTarget+7:posTarget+8] == '"':
+							endQuote = '"'
+						elif self.responseBody[posTarget+7:posTarget+8] == "'":
+							endQuote = "'"
+						else:
+							endQuote = ">"                    
+					
+						posTargetEnd = self.responseBody[posTarget+8:posEndA].lower().find(endQuote)
+						#TODO rework needed
+						self.target = self.responseBody[posTarget+8:posTarget+8+posTargetEnd]
+				
+					self.rel = ""
+					if self.responseBody.lower().find("rel") < posEndA:
+						posRel = self.responseBody.lower().find("rel")
+						#search the end of this parameter - might be ' or " or even a space, but it should be directly after the target
+						if self.responseBody[posRel+4:posRel+5] == '"':
+							endQuote = '"'
+						elif self.responseBody[posRel+4:posRel+5] == "'":
+							endQuote = "'"
+						else:
+							endQuote = ">"                    
+					
+						posRelEnd = self.responseBody[posRel+5:posEndA].lower().find(endQuote)
+					
+						self.rel = self.responseBody[posRel+5:posRel+5+posRelEnd]
+			   
+						#Is this link vulnerable to Tabnabbing?
+						if self.target != "" and not isRelLink:
+							if self.rel.lower().find("noopener") == -1:
+								self.Vulnerabilities = self.Vulnerabilities + " Tabnabbing"       
+					#if rel= is not defined, but target is, the link is still vulnerable for tabnabbing
+					elif self.target != "" and not isRelLink:
+						self.Vulnerabilities = self.Vulnerabilities + " Tabnabbing"       
+					
+			   
+					if (isAbsLink and self.destAbs) or (isRelLink and self.destRel):
+						# remove white space and extra CR/LF characters
+						self.tableData.append([self.stripURLPort(self.urlDecode), str(self.isHttps), self.lstripWS(self.stripCRLF(self.link)), self.lstripWS(self.stripCRLF(self.description)), self.lstripWS(self.stripCRLF(self.target)), self.lstripWS(self.stripCRLF(self.rel)), self.lstripWS(self.stripCRLF(self.Vulnerabilities))])
+           
+            except:
+                print('An error occured during processing of a link [ ' + str(i) + ' ] ignored it and continued with the next.')
+           
         dataModel = DefaultTableModel(self.tableData, self.colNames)
         self.uiLogTable = swing.JTable(dataModel)
+        self.uiLogTable.setAutoCreateRowSorter(True);
+        
         self.uiLogPane.setViewportView(self.uiLogTable)
 
     def exportCodes(self, e):
@@ -283,7 +375,7 @@ class BurpExtender(IBurpExtender, ITab):
         if '3' in self.rcodes:
             self.colNames = ('Request','Referer','Response Code','Redirects To')
         else:
-            self.colNames.append('Request','Referer','Response Code')
+            self.colNames = ('Request','Referer','Response Code')
         self.tableData = []
 
         for i in self.siteMapData:
@@ -322,6 +414,7 @@ class BurpExtender(IBurpExtender, ITab):
 
         dataModel = DefaultTableModel(self.tableData, self.colNames)
         self.uiLogTable = swing.JTable(dataModel)
+        self.uiLogTable.setAutoCreateRowSorter(True);
         self.uiLogPane.setViewportView(self.uiLogTable)
         
     def exportSiteMap(self,e):

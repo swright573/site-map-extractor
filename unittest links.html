@@ -1,0 +1,161 @@
+<html>
+<body>
+<h1>Testcases for Site Map Extractor</h1>
+Last tested with: <br />
+- Burp Suite Pro 2.1.07<br />
+- Jython 2.7.1<br />
+<br />
+How to test?<br />
+ Put this file on a webserver and request it (make sure you get a 200, not cache) using a browser with Burp as proxy.<br />
+ Open the Site Map Extractor Extension, set it to full site map and hit 'run'. <br />
+ Re-test? Delete the request 'item' from the Proxy > HTTP History first.<br />
+<br />
+<br />
+
+== http cases with double quotes ===
+
+Case 1A: " with http
+<a href="http://example.com/1A">1A</a>
+
+Case 1B: " with http and target blank
+<a href="http://example.com/1B" target="_blank">1B</a>
+
+Case 1C: " with http and target _blank with rel="nofollow"
+<a href="http://example.com/1C" target="_blank" rel="nofollow">1C</a>
+
+Case 1D: " with http and target _blank with rel="nofollow noreferrer"
+<a href="http://example.com/1D" target="_blank" rel="nofollow noreferrer">1D</a>
+
+Case 1E: " with http and target _blank with rel="nofollow noreferrer"
+<a href="http://example.com/1E" target="_blank" rel="nofollow noreferrer noopener">1E</a>
+
+== https cases with double quotes ===
+
+Case 2A: " with https
+<a href="https://example.com/2A">2A</a>
+
+Case 2B: " with https and target blank
+<a href="https://example.com/2B" target="_blank">2B</a>
+
+Case 2C: " with https and target _blank with rel="nofollow"
+<a href="https://example.com/2C" target="_blank" rel="nofollow">2C</a>
+
+Case 2D: " with https and target _blank with rel="nofollow noreferrer"
+<a href="https://example.com/2D" target="_blank" rel="nofollow noreferrer">2D</a>
+
+Case 2E: " with https and target _blank with rel="nofollow noreferrer noopener"
+<a href="https://example.com/2E" target="_blank" rel="nofollow noreferrer noopener">2E</a>
+
+
+== https cases with double quotes to other domain===
+
+Case 3A: " with https to other domain
+<a href="https://example.com/3A">3A</a>
+
+Case 3B: " with https and target blank to other domain
+<a href="https://example.com/3B" target="_blank">3B</a>
+
+Case 3C: " with https and target _blank with rel="nofollow" to other domain
+<a href="https://example.com/3C" target="_blank" rel="nofollow">3C</a>
+
+Case 3D: " with https and target _blank with rel="nofollow noreferrer" to other domain
+<a href="https://example.com/3D" target="_blank" rel="nofollow noreferrer">3D</a>
+
+
+         
+== http cases with single quotes ===
+
+Case 4A: ' with http
+<a href='http://example.com/4A'>4A</a>
+
+Case 4B: ' with http and target blank
+<a href='http://example.com/4B' target='_blank'>4B</a>
+
+Case 4C: ' with http and target _blank with rel='nofollow'
+<a href='http://example.com/4C' target='_blank' rel='nofollow'>4C</a>
+
+Case 4D: ' with http and target _blank with rel='nofollow noreferrer'
+<a href='http://example.com/4D' target='_blank' rel='nofollow noreferrer'>4D</a>
+
+== https cases with double quotes ===
+
+Case 5A: ' with https
+<a href='https://example.com/5A'>5A</a>
+
+Case 5B: ' with https and target blank
+<a href='https://example.com/5B' target='_blank'>5B</a>
+
+Case 5C: ' with https and target _blank with rel='nofollow'
+<a href='https://example.com/5C' target='_blank' rel='nofollow'>5C</a>
+
+Case 5D: ' with https and target _blank with rel='nofollow noreferrer'
+<a href='https://example.com/5D' target='_blank' rel='nofollow noreferrer'>5D</a>
+
+== https cases with double quotes to other domain===
+
+Case 6A: ' with https to other domain
+<a href='https://example.com/6A'>6A</a>
+
+Case 6B: ' with https and target blank to other domain
+<a href='https://example.com/6B' target='_blank'>6B</a>
+
+Case 6C: ' with https and target _blank with rel='nofollow' to other domain
+<a href='https://example.com/6C' target='_blank' rel='nofollow'>6C</a>
+
+Case 6D: ' with https and target _blank with rel='nofollow noreferrer' to other domain
+<a href='https://example.com/6D' target='_blank' rel='nofollow noreferrer'>6D</a>
+
+== relative cases with single quotes ===
+
+Case 7A: ' with relative
+<a href='/7A'>7A</a>
+
+Case 7B: ' with http and target blank
+<a href='/7B' target='_blank'>7B</a>
+
+Case 7C: ' with http and target _blank with rel='nofollow'
+<a href='/7C' target='_blank' rel='nofollow'>7C</a>
+
+Case 7D: ' with http and target _blank with rel='nofollow noreferrer'
+<a href='/7D' target='_blank' rel='nofollow noreferrer'>7D</a>
+
+== relative cases with double quotes ===
+
+Case 8A: ' with relative
+<a href='/8A'>8A</a>
+
+Case 8B: ' with https and target blank
+<a href='/8B' target='_blank'>8B</a>
+
+Case 8C: ' with https and target _blank with rel='nofollow'
+<a href='/8C' target='_blank' rel='nofollow'>8C</a>
+
+Case 8D: ' with https and target _blank with rel='nofollow noreferrer'
+<a href='/8D' target='_blank' rel='nofollow noreferrer'>8D</a>
+
+
+== Some troublemakers ;)
+
+<A href='https://example.com/10A' target='_blank' rel='nofollow noreferrer'>10A</A>
+
+<A href="https://example.com/10B" target='_blank' rel='nofollow noreferrer'>10B</A>
+
+<A href="https://example.com/10C" target='_blank' rel='nofollow noreferrer'>10C</a>
+
+<A href='https://example.com/10D' target='_blank' rel='noopener nofollow noreferrer'>10D</A>
+
+<A href="https://example.com/10E" target='_blank' rel=' nofollow noopener noreferrer'>10E</A>
+
+<A href="https://example.com/10F" target='_blank' rel=noopener>10F</a>                                    
+
+<A href="https://example.com/10G" target=_blank rel=noopener>10G</a>   
+
+<!-- Not detected currently -->
+<A target=_blank rel=noopener href="https://example.com/10H">10H</a>  <!-- Due to captital not starting with <a href= -->                             
+
+<A href="https://example.com/10I<>" target=_blank rel=noopener>10I</a>  <!-- Not handled correctly at this moment -->
+
+10J: Exact case yet unknown, but happens sometimes with unicode, add when known <!-- Will throw error, but operation should not be stopped -->
+
+</body>
+</html>
