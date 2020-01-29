@@ -2,8 +2,8 @@ Uuid: f991b67d4ef94f3c8692c3edca06583e
 ExtensionType: 2
 Name: Site Map Extractor
 RepoName: site-map-extractor
-ScreenVersion: 1.1
-SerialVersion: 1
+ScreenVersion: 1.2
+SerialVersion: 6
 MinPlatformVersion: 0
 ProOnly: False
 Author: Susan Wright
