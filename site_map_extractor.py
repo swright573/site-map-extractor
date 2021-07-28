@@ -410,7 +410,7 @@ class BurpExtender(IBurpExtender, ITab):
                 for j in self.responseHeaders:
                     if j.startswith('Location:'):
                         self.location = j.split(' ')[1]
-                self.tableData.append([self.stripURLPort(self.urlDecode), str(self.referer), str(self.responseCode), self.location])
+                        self.tableData.append([self.stripURLPort(self.urlDecode), str(self.referer), str(self.responseCode), self.location])
 
         dataModel = DefaultTableModel(self.tableData, self.colNames)
         self.uiLogTable = swing.JTable(dataModel)
