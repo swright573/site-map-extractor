@@ -383,8 +383,10 @@ class BurpExtender(IBurpExtender, ITab):
             self.url = self.requestInfo.getUrl()
             if self.scopeOnly() and not(self._callbacks.isInScope(self.url)):
                 continue
-
-            self.urlDecode = self._helpers.urlDecode(str(self.url))
+            try:
+                self.urlDecode = self._helpers.urlDecode(str(self.url))
+            except:
+                continue
             self.response = i.getResponse()
             if self.response == None:
                 continue
